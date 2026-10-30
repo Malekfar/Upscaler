@@ -1,0 +1,26 @@
+services:
+  upscaler:
+    build:
+      context: .
+      args:
+        TORCH_INDEX_URL: https://download.pytorch.org/whl/cu132
+    image: upscaler:cuda
+    ports:
+      - "9090:7860"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      UPSCALER_TABS: ${UPSCALER_TABS-Color & Light}
+    volumes:
+      - weights:/data/weights
+      - home:/home/app/.upscaler
+    restart: unless-stopped
+
+volumes:
+  weights:
+  home:

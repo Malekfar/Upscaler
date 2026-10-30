@@ -2922,6 +2922,15 @@ def _section_head(eyebrow: str, title: str, desc: str, icon: str = "") -> str:
     )
 
 
+# Comma-separated tab labels to show (e.g. "Color & Light"); empty shows all.
+# Hidden tabs are still built, so cross-tab wiring keeps working.
+_VISIBLE_TABS = [t.strip() for t in os.environ.get("UPSCALER_TABS", "").split(",") if t.strip()]
+
+
+def _tab(label: str) -> gr.Tab:
+    return gr.Tab(label, id=label, visible=not _VISIBLE_TABS or label in _VISIBLE_TABS)
+
+
 def build_demo() -> gr.Blocks:
     _purge_old_exports()
     device_name = resolve_device("auto").type
@@ -2959,9 +2968,9 @@ def build_demo() -> gr.Blocks:
         # JS-only toggle: enables the hover loupe over result images
         mag_btn.click(None, js="() => document.body.classList.toggle('loupe-on')")
 
-        with gr.Tabs() as main_tabs:
+        with gr.Tabs(selected=_VISIBLE_TABS[0] if _VISIBLE_TABS else None) as main_tabs:
             # ---- Tab: Upscale & Enhance ----
-            with gr.Tab("Upscale"):
+            with _tab("Upscale"):
                 gr.HTML(_section_head(
                     "Enhance", "Upscale & Enhance",
                     "Enlarge and sharpen any image with AI, plus optional cleanup "
@@ -3170,7 +3179,7 @@ def build_demo() -> gr.Blocks:
                         info = gr.Markdown()
 
             # ---- Tab: Colorize (DDColor) ----
-            with gr.Tab("Colorize"):
+            with _tab("Colorize"):
                 gr.HTML(_section_head(
                     "Color", "Colorize Photos",
                     "Bring black-and-white or faded photos to life. DDColor predicts "
@@ -3217,7 +3226,7 @@ def build_demo() -> gr.Blocks:
                         col_info = gr.Markdown()
 
             # ---- Tab: Remove objects / inpaint (LaMa) ----
-            with gr.Tab("Objects"):
+            with _tab("Objects"):
                 gr.HTML(_section_head(
                     "Erase", "Remove Objects",
                     "Paint over anything you want gone — a photobomber, a sign, a "
@@ -3262,7 +3271,7 @@ def build_demo() -> gr.Blocks:
                         ip_info = gr.Markdown()
 
             # ---- Tab: Remove background ----
-            with gr.Tab("Remove BG"):
+            with _tab("Remove BG"):
                 gr.HTML(_section_head(
                     "Cut-out", "Remove Background",
                     "Lift the subject cleanly off its background with AI and save a "
@@ -3314,7 +3323,7 @@ def build_demo() -> gr.Blocks:
                         bg_info = gr.Markdown()
 
             # ---- Tab: Color & light (no AI) ----
-            with gr.Tab("Color & Light"):
+            with _tab("Color & Light"):
                 gr.HTML(_section_head(
                     "Develop", "Color & Light",
                     "Exposure, contrast, highlights and shadows, white balance, "
@@ -3515,7 +3524,7 @@ def build_demo() -> gr.Blocks:
                         ad_info = gr.Markdown()
 
             # ---- Tab: Effects & film looks (no AI) ----
-            with gr.Tab("Effects"):
+            with _tab("Effects"):
                 gr.HTML(_section_head(
                     "Looks", "Effects & film looks",
                     "Grain, halation, light leaks, vignettes, duotone, halftone, "
@@ -3748,7 +3757,7 @@ def build_demo() -> gr.Blocks:
                         fx_info = gr.Markdown()
 
             # ---- Tab: Blur toolbox (no AI) ----
-            with gr.Tab("Blur"):
+            with _tab("Blur"):
                 gr.HTML(_section_head(
                     "Blur", "Blur toolbox",
                     "Eight kinds of blur — soft, motion, spin, zoom, lens bokeh, "
@@ -3918,7 +3927,7 @@ def build_demo() -> gr.Blocks:
                         bl_info = gr.Markdown()
 
             # ---- Tab: Watermark (no AI) ----
-            with gr.Tab("Watermark"):
+            with _tab("Watermark"):
                 gr.HTML(_section_head(
                     "Credit", "Watermark",
                     "Sign your work with text or a logo — in a corner, tiled across the "
@@ -4069,7 +4078,7 @@ def build_demo() -> gr.Blocks:
                         wm_info = gr.Markdown()
 
             # ---- Tab: Design templates (no AI, except the cut-out one) ----
-            with gr.Tab("Design"):
+            with _tab("Design"):
                 # The first template, resolved here so every control below opens
                 # already showing it — a load event would leave the tab blank
                 # until the browser had been round-tripped.
@@ -4189,7 +4198,7 @@ def build_demo() -> gr.Blocks:
                         dz_info = gr.Markdown()
 
             # ---- Tab: Screenshot beautifier (no AI) ----
-            with gr.Tab("Screenshot"):
+            with _tab("Screenshot"):
                 gr.HTML(_section_head(
                     "Present", "Screenshot Beautifier",
                     "Turn a raw screen capture into something you can put in a README, "
@@ -4338,7 +4347,7 @@ def build_demo() -> gr.Blocks:
                         shot_info = gr.Markdown()
 
             # ---- Tab: Crop & frame (no AI) ----
-            with gr.Tab("Crop"):
+            with _tab("Crop"):
                 gr.HTML(_section_head(
                     "Geometry", "Crop & Frame",
                     "Crop to any shape, straighten a tilted horizon, fix leaning "
@@ -4486,7 +4495,7 @@ def build_demo() -> gr.Blocks:
                         fr_info = gr.Markdown()
 
             # ---- Tab: Sharpen (no AI) ----
-            with gr.Tab("Sharpen"):
+            with _tab("Sharpen"):
                 gr.HTML(_section_head(
                     "Detail", "Sharpen",
                     "Four ways to bring out detail — the classic unsharp mask, a "
@@ -4656,7 +4665,7 @@ def build_demo() -> gr.Blocks:
                         sh_info = gr.Markdown()
 
             # ---- Tab: Video upscaler (frame-by-frame) ----
-            with gr.Tab("Video"):
+            with _tab("Video"):
                 gr.HTML(_section_head(
                     "Video", "Video Upscaler",
                     "Upscale a clip frame by frame on your own machine, keeping the "
@@ -4777,7 +4786,7 @@ def build_demo() -> gr.Blocks:
                         vid_info = gr.Markdown()
 
             # ---- Tab: Convert & documents (format / PDF) ----
-            with gr.Tab("Convert"):
+            with _tab("Convert"):
                 gr.HTML(_section_head(
                     "Convert", "Convert & Documents",
                     "Change an image's format, combine several images into a PDF, "
@@ -5006,7 +5015,7 @@ def build_demo() -> gr.Blocks:
                 )
 
             # ---- Tab: Batch (one operation over many images) ----
-            with gr.Tab("Batch"):
+            with _tab("Batch"):
                 gr.HTML(_section_head(
                     "Batch", "Batch Processing",
                     "Drop a whole stack of images, pick one operation, and run it "
@@ -5126,7 +5135,7 @@ def build_demo() -> gr.Blocks:
                                    cancels=[batch_evt])
 
             # ---- Tab: Lian Li 8.8" Screen builder ----
-            with gr.Tab("Lian Li"):
+            with _tab("Lian Li"):
                 gr.HTML(_section_head(
                     "Panel", "Lian Li 8.8″ Screen",
                     "Compose media at the panel's exact size (1920×480 or 480×1920, "
@@ -5428,7 +5437,7 @@ def build_demo() -> gr.Blocks:
                         pn_info = gr.Markdown()
 
             # ---- Tab: Steam Workshop Showcase (five tiles from one picture/clip) ----
-            with gr.Tab("Steam"):
+            with _tab("Steam"):
                 gr.HTML(_section_head(
                     "Steam", "Workshop Showcase tiles",
                     "Turn a photo, GIF or video into the five tiles Steam shows side by "
@@ -5598,7 +5607,7 @@ def build_demo() -> gr.Blocks:
                         st_info = gr.Markdown()
 
             # ---- Tab: Library (everything you export, saved automatically) ----
-            with gr.Tab("Library") as lib_tab:
+            with _tab("Library") as lib_tab:
                 gr.HTML(_section_head(
                     "Library", "Your Library",
                     "Everything you export is saved here automatically, so your "
@@ -6256,7 +6265,7 @@ def build_demo() -> gr.Blocks:
 
 def main(inbrowser: bool = False) -> None:
     build_demo().launch(
-        server_name="127.0.0.1",
+        server_name=os.environ.get("UPSCALER_HOST", "127.0.0.1"),
         server_port=int(os.environ.get("UPSCALER_PORT", "7860")),
         theme=THEME,
         css=_CSS,
