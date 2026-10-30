@@ -15,7 +15,6 @@ services:
               count: all
               capabilities: [gpu]
     environment:
-      UPSCALER_TABS: ${UPSCALER_TABS-Color & Light}
       UPSCALER_API_OUTPUT_DIR: /data/api-output
     volumes:
       - weights:/data/weights

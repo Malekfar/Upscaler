@@ -2922,13 +2922,8 @@ def _section_head(eyebrow: str, title: str, desc: str, icon: str = "") -> str:
     )
 
 
-# Comma-separated tab labels to show (e.g. "Color & Light"); empty shows all.
-# Hidden tabs are still built, so cross-tab wiring keeps working.
-_VISIBLE_TABS = [t.strip() for t in os.environ.get("UPSCALER_TABS", "").split(",") if t.strip()]
-
-
 def _tab(label: str) -> gr.Tab:
-    return gr.Tab(label, id=label, visible=not _VISIBLE_TABS or label in _VISIBLE_TABS)
+    return gr.Tab(label, id=label)
 
 
 def build_demo() -> gr.Blocks:
@@ -2968,7 +2963,7 @@ def build_demo() -> gr.Blocks:
         # JS-only toggle: enables the hover loupe over result images
         mag_btn.click(None, js="() => document.body.classList.toggle('loupe-on')")
 
-        with gr.Tabs(selected=_VISIBLE_TABS[0] if _VISIBLE_TABS else None) as main_tabs:
+        with gr.Tabs() as main_tabs:
             # ---- Tab: Upscale & Enhance ----
             with _tab("Upscale"):
                 gr.HTML(_section_head(
