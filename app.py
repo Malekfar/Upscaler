@@ -6268,7 +6268,7 @@ def main(inbrowser: bool = False) -> None:
 
     demo = build_demo()
     demo.launch(
-        server_name=os.environ.get("UPSCALER_HOST", "127.0.0.1"),
+        server_name="0.0.0.0",
         server_port=int(os.environ.get("UPSCALER_PORT", "7860")),
         theme=THEME,
         css=_CSS,
