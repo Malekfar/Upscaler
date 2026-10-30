@@ -582,3 +582,38 @@ Xintao Wang et al. for Real-ESRGAN and to BasicSR for the RRDBNet architecture,
 and to Chen et al. / megvii-research for NAFNet (MIT). NAFNet deblur weights are
 mirrored on Hugging Face (`nyanko7/nafnet-models`); the upstream originals are on
 the official NAFNet Google Drive.
+
+## Image pipeline API
+
+The API accepts an image, upscales it, applies color-and-light adjustments, and
+saves the result as a PNG. Start the Docker services with `docker compose up --build`;
+the API and web UI are both available on port 9090. The
+Compose configuration requires an NVIDIA GPU. API output is stored persistently
+in the `api-output` Docker volume.
+
+```sh
+curl -X POST http://localhost:9090/api/pipeline \
+  -F 'image=@photo.jpg' \
+  -F 'model=realesrgan-x4plus' \
+  -F 'adjustments={"exposure":10,"contrast":8,"vibrance":18}'
+```
+
+The response contains an `id`, `download_url`, output dimensions and model.
+GET the returned URL to download the PNG. The URL uses the request's host; when
+running behind a reverse proxy, configure trusted forwarded headers so it reflects
+its public address. Output files remain until manually removed from the volume.
+The API has no authentication, so restrict network access as needed.
+
+The model defaults to `realesrgan-x4plus`; other names in the project model
+registry are accepted. `adjustments` is a JSON object and defaults to neutral
+values. It accepts `exposure`, `contrast`, `highlights`, `shadows`, `clarity`,
+`temperature`, `tint`, `saturation`, and `vibrance` (−100 to 100); `hue`
+(−180 to 180); `black_point` (0 to 50); `white_point` (50 to 100); `gamma`
+(0.2 to 3); `mono` (boolean); `mono_red`, `mono_green`, `mono_blue`, and
+`tone_strength` (0 to 100); and `tone_color` (a six-digit hex color). Uploads
+are limited to 20 MiB. Processing is synchronous and may take time on the first
+request while model weights download.
+
+To run outside Docker, install `pip install '.[gui,api]'` and run
+`python app.py`; the UI and API share port 7860 by default. Set
+`UPSCALER_API_OUTPUT_DIR` to change the output directory (default `out/api`).

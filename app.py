@@ -6264,7 +6264,10 @@ def build_demo() -> gr.Blocks:
 
 
 def main(inbrowser: bool = False) -> None:
-    build_demo().launch(
+    from upscaler.api import app as pipeline_api
+
+    demo = build_demo()
+    demo.launch(
         server_name=os.environ.get("UPSCALER_HOST", "127.0.0.1"),
         server_port=int(os.environ.get("UPSCALER_PORT", "7860")),
         theme=THEME,
@@ -6272,10 +6275,17 @@ def main(inbrowser: bool = False) -> None:
         js=_APPLY_THEME_JS,
         head=_MAGNIFIER_HEAD,
         inbrowser=inbrowser,
+        prevent_thread_lock=True,
         # The Library reads from ~/.upscaler/library, outside the app dir — Gradio
         # won't serve files from there unless the folder is explicitly allowed.
         allowed_paths=[str(library.ensure_dir())],
     )
+    # Put the pipeline routes ahead of Gradio's parameterized API routes.
+    routes = [route for route in pipeline_api.routes
+              if getattr(route, "path", "").startswith(("/api/pipeline", "/api/images/"))]
+    demo.app.router.routes[0:0] = routes
+    demo.app.openapi_schema = None
+    demo.block_thread()
 
 
 def gui() -> None:

@@ -16,11 +16,14 @@ services:
               capabilities: [gpu]
     environment:
       UPSCALER_TABS: ${UPSCALER_TABS-Color & Light}
+      UPSCALER_API_OUTPUT_DIR: /data/api-output
     volumes:
       - weights:/data/weights
       - home:/home/app/.upscaler
+      - api-output:/data/api-output
     restart: unless-stopped
 
 volumes:
+  api-output:
   weights:
   home:
