@@ -585,16 +585,18 @@ the official NAFNet Google Drive.
 
 ## Image pipeline API
 
-The API accepts an image, upscales it, applies color-and-light adjustments, and
+The API accepts an image, optionally upscales it, applies color-and-light adjustments, and
 saves the result as a PNG. Start the Docker services with `docker compose up --build`;
 the API and web UI are both available on port 9090. The
 Compose configuration requires an NVIDIA GPU. API output is stored persistently
-in the `api-output` Docker volume.
+in the `api-output` Docker volume. Interactive Swagger documentation is available
+at `http://localhost:9090/api/docs`.
 
 ```sh
 curl -X POST http://localhost:9090/api/pipeline \
   -F 'image=@photo.jpg' \
   -F 'model=realesrgan-x4plus' \
+  -F 'upscale=false' \
   -F 'adjustments={"exposure":10,"contrast":8,"vibrance":18}'
 ```
 
@@ -615,8 +617,10 @@ running behind a reverse proxy, configure trusted forwarded headers so it reflec
 its public address. Output files remain until manually removed from the volume.
 The API has no authentication, so restrict network access as needed.
 
-The model defaults to `realesrgan-x4plus`; other names in the project model
-registry are accepted. `adjustments` is a JSON object and defaults to neutral
+Set `upscale=false` to keep the original dimensions and apply only the
+color-and-light adjustments. Upscaling defaults to true; when enabled, the model
+defaults to `realesrgan-x4plus`, and other names in the project model registry
+are accepted. The model field is ignored when upscaling is disabled. `adjustments` is a JSON object and defaults to neutral
 values. It accepts `exposure`, `contrast`, `highlights`, `shadows`, `clarity`,
 `temperature`, `tint`, `saturation`, and `vibrance` (−100 to 100); `hue`
 (−180 to 180); `black_point` (0 to 50); `white_point` (50 to 100); `gamma`

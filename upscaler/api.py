@@ -19,7 +19,8 @@ from upscaler.adjust import AdjustParams, adjust_image
 from upscaler.engine import OutputTooLargeError, Upscaler
 from upscaler.models.registry import MODELS
 
-app = FastAPI(title="Upscaler API")
+app = FastAPI(title="Upscaler Pipeline API", docs_url="/api/docs",
+              openapi_url="/api/openapi.json", redoc_url=None)
 _OUTPUT_DIR = Path(os.environ.get("UPSCALER_API_OUTPUT_DIR", "out/api"))
 _MAX_UPLOAD = 20 * 1024 * 1024
 _engines = {}
@@ -56,13 +57,16 @@ class Adjustments(BaseModel):
         extra = "forbid"
 
 
-def _process_job(job_id: UUID, original: Image.Image, model: str, params: dict):
+def _process_job(job_id: UUID, original: Image.Image, model: str, params: dict, upscale: bool):
     try:
         with _jobs_lock:
             _jobs[job_id]["status"] = "processing"
-        if model not in _engines:
-            _engines[model] = Upscaler(model=model, device="auto", tile=256)
-        result = _engines[model].upscale(original)
+        if upscale:
+            if model not in _engines:
+                _engines[model] = Upscaler(model=model, device="auto", tile=256)
+            result = _engines[model].upscale(original)
+        else:
+            result = original
         result = adjust_image(result, AdjustParams(**params))
         _OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         path = _OUTPUT_DIR / f"{job_id}.png"
@@ -83,11 +87,23 @@ def _process_job(job_id: UUID, original: Image.Image, model: str, params: dict):
 
 
 @app.post("/api/pipeline", status_code=202)
-def pipeline(request: Request, image: UploadFile = File(...),
-             model: str = Form("realesrgan-x4plus"),
-             adjustments: str = Form("{}")):
-    """Queue an image for upscaling followed by color/light adjustments."""
-    if model not in MODELS:
+def pipeline(request: Request,
+             image: UploadFile = File(..., description="Image to process (maximum 20 MiB)."),
+             model: str = Form("realesrgan-x4plus", description="Upscale model, used when upscale is true."),
+             upscale: bool = Form(True, description="Set false to retain the original image dimensions."),
+             adjustments: str = Form("{}", description='JSON object, e.g. {"exposure":10,"contrast":8}.')):
+    """Queue an image for optional upscaling and color/light adjustments.
+
+    Poll the returned status_url for completion and a download URL.
+
+    The adjustments form field is a JSON object. Exposure, contrast,
+    highlights, shadows, clarity, temperature, tint, saturation and vibrance
+    range from -100 to 100. Hue ranges from -180 to 180; black_point from
+    0 to 50; white_point from 50 to 100; gamma from 0.2 to 3. Set mono to
+    true for black and white. mono_red, mono_green, mono_blue and
+    tone_strength range from 0 to 100; tone_color is a six-digit hex color.
+    """
+    if upscale and model not in MODELS:
         raise HTTPException(422, "Unknown upscale model")
     try:
         settings = Adjustments(**json.loads(adjustments))
@@ -106,10 +122,11 @@ def pipeline(request: Request, image: UploadFile = File(...),
         raise HTTPException(503, "The processing queue is full; try again later")
     job_id = uuid4()
     with _jobs_lock:
-        _jobs[job_id] = {"id": str(job_id), "status": "queued", "model": model}
+        _jobs[job_id] = {"id": str(job_id), "status": "queued", "upscale": upscale,
+                         "model": model if upscale else None}
     params = settings.model_dump() if hasattr(settings, "model_dump") else settings.dict()
     try:
-        _executor.submit(_process_job, job_id, original, model, params)
+        _executor.submit(_process_job, job_id, original, model, params, upscale)
     except Exception:
         with _jobs_lock:
             _jobs.pop(job_id, None)
@@ -121,6 +138,7 @@ def pipeline(request: Request, image: UploadFile = File(...),
 
 @app.get("/api/jobs/{job_id}", name="pipeline_status")
 def pipeline_status(request: Request, job_id: UUID):
+    """Return job status and, when complete, the result download URL."""
     with _jobs_lock:
         job = _jobs.get(job_id)
         if job is None:
@@ -133,6 +151,7 @@ def pipeline_status(request: Request, job_id: UUID):
 
 @app.get("/api/images/{image_id}", name="download")
 def download(image_id: UUID):
+    """Download a completed result as a PNG image."""
     path = _OUTPUT_DIR / f"{image_id}.png"
     if not path.is_file():
         raise HTTPException(404, "Image not found")

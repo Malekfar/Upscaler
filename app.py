@@ -6276,8 +6276,10 @@ def main(inbrowser: bool = False) -> None:
         allowed_paths=[str(library.ensure_dir())],
     )
     # Put the pipeline routes ahead of Gradio's parameterized API routes.
+    api_paths = {"/api/docs", "/api/openapi.json", "/api/pipeline",
+                 "/api/jobs/{job_id}", "/api/images/{image_id}"}
     routes = [route for route in pipeline_api.routes
-              if getattr(route, "path", "").startswith(("/api/pipeline", "/api/jobs/", "/api/images/"))]
+              if getattr(route, "path", "") in api_paths]
     demo.app.router.routes[0:0] = routes
     demo.app.openapi_schema = None
     demo.block_thread()
