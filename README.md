@@ -598,8 +598,19 @@ curl -X POST http://localhost:9090/api/pipeline \
   -F 'adjustments={"exposure":10,"contrast":8,"vibrance":18}'
 ```
 
-The response contains an `id`, `download_url`, output dimensions and model.
-GET the returned URL to download the PNG. The URL uses the request's host; when
+The upload returns HTTP 202 with a job `id` and `status_url`. Poll the status
+URL until its `status` is `completed` or `failed`:
+
+```sh
+curl http://localhost:9090/api/jobs/JOB_UUID
+```
+
+Statuses are `queued`, `processing`, `completed`, and `failed`. A completed
+job includes output dimensions and a `download_url`; GET that URL for the PNG.
+A failed job includes an error and the details are logged by the server. Job
+statuses are stored in memory and are lost on restart; output files persist.
+The queue accepts up to eight running or waiting jobs and returns HTTP 503 when
+full. The URLs use the request's host; when
 running behind a reverse proxy, configure trusted forwarded headers so it reflects
 its public address. Output files remain until manually removed from the volume.
 The API has no authentication, so restrict network access as needed.
@@ -611,8 +622,8 @@ values. It accepts `exposure`, `contrast`, `highlights`, `shadows`, `clarity`,
 (−180 to 180); `black_point` (0 to 50); `white_point` (50 to 100); `gamma`
 (0.2 to 3); `mono` (boolean); `mono_red`, `mono_green`, `mono_blue`, and
 `tone_strength` (0 to 100); and `tone_color` (a six-digit hex color). Uploads
-are limited to 20 MiB. Processing is synchronous and may take time on the first
-request while model weights download.
+are limited to 20 MiB. Processing runs in the background and may take time on
+the first request while model weights download.
 
 To run outside Docker, install `pip install '.[gui,api]'` and run
 `python app.py`; the UI and API share port 7860 by default. Set

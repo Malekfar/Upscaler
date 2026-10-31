@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import hashlib
 import os
 import shutil
@@ -35,9 +36,9 @@ def _sha256(path: Path) -> str:
 
 
 def _download(url: str, dest: Path) -> None:
-    dest.parent.mkdir(parents=True, exist_ok=True)
     req = urllib.request.Request(url, headers={"User-Agent": "upscaler/0.1"})
     try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
         # timeout so a stalled connection errors out instead of hanging the
         # CLI/GUI job forever (it applies per socket op, not the whole download)
         with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 (trusted release URL)
@@ -61,6 +62,11 @@ def _download(url: str, dest: Path) -> None:
                 if tmp.exists():
                     tmp.unlink()
     except OSError as e:
+        if e.errno == errno.ENOSPC:
+            raise RuntimeError(
+                f"Could not save {dest.name}: no space left on the filesystem "
+                f"containing {dest.parent}. Free disk space and try again."
+            ) from e
         # URLError / HTTPError / timeouts / connection / DNS errors all subclass
         # OSError. Re-raise as RuntimeError so the GUI handlers (which catch
         # RuntimeError) show a friendly message instead of a raw traceback.
