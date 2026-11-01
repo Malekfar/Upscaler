@@ -6277,7 +6277,9 @@ def main(inbrowser: bool = False) -> None:
     )
     # Put the pipeline routes ahead of Gradio's parameterized API routes.
     api_paths = {"/api/docs", "/api/openapi.json", "/api/pipeline",
-                 "/api/jobs/{job_id}", "/api/images/{image_id}"}
+                 "/api/jobs", "/api/queue", "/api/jobs/{job_id}", "/api/images/{image_id}"}
+    from upscaler.api import _start_queue
+    _start_queue()
     routes = [route for route in pipeline_api.routes
               if getattr(route, "path", "") in api_paths]
     demo.app.router.routes[0:0] = routes

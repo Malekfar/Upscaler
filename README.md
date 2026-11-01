@@ -609,13 +609,19 @@ curl http://localhost:9090/api/jobs/JOB_UUID
 
 Statuses are `queued`, `processing`, `completed`, and `failed`. A completed
 job includes output dimensions and a `download_url`; GET that URL for the PNG.
-A failed job includes an error and the details are logged by the server. Job
-statuses are stored in memory and are lost on restart; output files persist.
-The queue accepts up to eight running or waiting jobs and returns HTTP 503 when
-full. The URLs use the request's host; when
+A failed job includes the error and the details are logged by the server. Open
+`http://localhost:9090/api/queue` to view jobs, their queue positions, stages,
+errors and download links. `GET /api/jobs?limit=50&offset=0` lists jobs (newest
+first, maximum limit 200). Jobs, pending uploads and outputs are stored in the
+output directory. A single consumer processes jobs in database insertion order,
+even with multiple server processes sharing the same local output directory.
+On restart, an interrupted job is returned to the front of the queue and retried.
+There is no fixed job count limit; available disk space limits the queue. The
+service returns 202 only after storing the upload and job record.
+The URLs use the request's host; when
 running behind a reverse proxy, configure trusted forwarded headers so it reflects
 its public address. Output files remain until manually removed from the volume.
-The API has no authentication, so restrict network access as needed.
+The API has no authentication; job errors may contain server details, so restrict network access to trusted users.
 
 Set `upscale=false` to keep the original dimensions and apply only the
 color-and-light adjustments. Upscaling defaults to true; when enabled, the model
