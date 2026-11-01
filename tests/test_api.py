@@ -35,6 +35,9 @@ def test_pipeline_and_download(tmp_path, monkeypatch):
         time.sleep(0.01)
     assert payload["status"] == "completed"
     assert (payload["width"], payload["height"]) == (4, 6)
+    assert payload["download_url"].startswith("https://")
+    listed = client.get("/api/jobs").json()["jobs"][0]
+    assert listed["download_url"] == payload["download_url"]
     downloaded = client.get(payload["download_url"])
     assert downloaded.status_code == 200
     assert downloaded.headers["content-type"] == "image/png"

@@ -223,7 +223,7 @@ def _job_response(request, row, db):
         job["queue_position"] = db.execute(
             "SELECT COUNT(*) FROM jobs WHERE status='queued' AND seq<=?", (seq,)).fetchone()[0]
     if job["status"] == "completed":
-        job["download_url"] = str(request.url_for("download", image_id=job["id"]))
+        job["download_url"] = str(request.url_for("download", image_id=job["id"]).replace(scheme="https"))
     return {key: value for key, value in job.items() if value is not None or key == "model"}
 
 

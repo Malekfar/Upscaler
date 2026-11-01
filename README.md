@@ -616,7 +616,10 @@ curl http://localhost:9090/api/jobs/JOB_UUID
 ```
 
 Statuses are `queued`, `processing`, `completed`, and `failed`. A completed
-job includes output dimensions and a `download_url`; GET that URL for the PNG.
+job includes output dimensions and an HTTPS `download_url`; GET that URL for the PNG.
+Serve the application through an HTTPS reverse proxy with a valid certificate;
+the application itself does not terminate TLS. Direct access to the HTTP-only
+container port cannot serve the HTTPS download URL.
 A failed job includes the error and the details are logged by the server. Open
 `http://localhost:9090/api/queue` to view jobs, their queue positions, stages,
 errors and download links. `GET /api/jobs?limit=50&offset=0` lists jobs (newest
