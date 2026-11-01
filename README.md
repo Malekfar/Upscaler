@@ -592,6 +592,14 @@ Compose configuration requires an NVIDIA GPU. API output is stored persistently
 in the `api-output` Docker volume. Interactive Swagger documentation is available
 at `http://localhost:9090/api/docs`.
 
+Docker keeps downloaded model weights in the named `weights` volume, so image
+rebuilds and container recreation do not download the same weights again. A
+model is downloaded the first time it is used. Keep the volume when stopping
+the application: `docker compose down` preserves it, while
+`docker compose down --volumes` deletes it. The Docker build also caches Python dependencies and
+reuses their layer when only application code changes. Changes to dependencies,
+the PyTorch index, or a cleared Docker build cache can require new downloads.
+
 ```sh
 curl -X POST http://localhost:9090/api/pipeline \
   -F 'image=@photo.jpg' \
