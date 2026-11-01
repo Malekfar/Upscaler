@@ -152,6 +152,7 @@ def test_fifo_queue_and_error_details(tmp_path, monkeypatch):
                 assert entered.wait(5)
         listing = client.get("/api/jobs?limit=50").json()
         assert listing["total"] == 12
+        assert listing["counts"] == {"processing": 1, "queued": 11}
         assert client.get(f"/api/jobs/{jobs[1]}").json()["queue_position"] == 1
         assert client.get(f"/api/jobs/{jobs[-1]}").json()["queue_position"] == 11
         assert seen == [0]

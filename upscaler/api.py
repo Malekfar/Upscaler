@@ -236,7 +236,9 @@ def list_jobs(request: Request, limit: int = 50, offset: int = 0):
     with _connect(_OUTPUT_DIR) as db:
         total = db.execute("SELECT COUNT(*) FROM jobs").fetchone()[0]
         rows = db.execute("SELECT * FROM jobs ORDER BY seq DESC LIMIT ? OFFSET ?", (limit, offset)).fetchall()
-        return {"total": total, "limit": limit, "offset": offset,
+        counts = {row["status"]: row["count"] for row in db.execute(
+            "SELECT status, COUNT(*) AS count FROM jobs GROUP BY status")}
+        return {"total": total, "counts": counts, "limit": limit, "offset": offset,
                 "jobs": [_job_response(request, row, db) for row in rows]}
 
 
