@@ -10,6 +10,7 @@ import time
 from datetime import datetime, timezone
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Optional
 from uuid import UUID, uuid4
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse
@@ -23,6 +24,7 @@ app = FastAPI(title="Upscaler Pipeline API", docs_url="/api/docs", openapi_url="
 _OUTPUT_DIR = Path(os.environ.get("UPSCALER_API_OUTPUT_DIR", "out/api"))
 _MAX_UPLOAD = 20 * 1024 * 1024
 _engines = {}
+_tagger = None
 _workers = {}
 _workers_lock = threading.Lock()
 _logger = logging.getLogger(__name__)
@@ -52,6 +54,43 @@ class Adjustments(BaseModel):
         extra = "forbid"
 
 
+class ImageTag(BaseModel):
+    label: str = Field(description="Persian sports or recreation label")
+    score: float = Field(description="CLIP cosine similarity, not a probability")
+
+
+class JobResponse(BaseModel):
+    id: str
+    status: str
+    stage: str
+    created_at: str
+    upscale: bool
+    model: Optional[str]
+    tagging: bool = Field(description="Whether sports tagging was requested")
+    started_at: Optional[str] = None
+    finished_at: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    error: Optional[str] = None
+    queue_position: Optional[int] = None
+    download_url: Optional[str] = None
+    tags: Optional[list[ImageTag]] = Field(default=None, description="Present on completed tagged jobs; may be empty")
+
+
+class JobList(BaseModel):
+    total: int
+    counts: dict[str, int]
+    limit: int
+    offset: int
+    jobs: list[JobResponse]
+
+
+class QueuedJob(BaseModel):
+    id: str
+    status: str
+    status_url: str
+
+
 @contextmanager
 def _connect(directory):
     directory.mkdir(parents=True, exist_ok=True)
@@ -64,6 +103,14 @@ def _connect(directory):
             status TEXT NOT NULL, stage TEXT NOT NULL, created_at TEXT NOT NULL,
             started_at TEXT, finished_at TEXT, upscale INTEGER NOT NULL, model TEXT,
             params TEXT NOT NULL, width INTEGER, height INTEGER, error TEXT)""")
+        db.commit()
+        # Serialize schema upgrades between API processes and background workers.
+        db.execute("BEGIN IMMEDIATE")
+        columns = {row["name"] for row in db.execute("PRAGMA table_info(jobs)")}
+        if "tagging" not in columns:
+            db.execute("ALTER TABLE jobs ADD COLUMN tagging INTEGER NOT NULL DEFAULT 0")
+        if "tags" not in columns:
+            db.execute("ALTER TABLE jobs ADD COLUMN tags TEXT")
         db.commit()
         with db:
             yield db
@@ -131,6 +178,7 @@ def _start_queue():
 
 
 def _process_job(directory, job):
+    global _tagger
     job_id = job["id"]
     input_path = directory / "inputs" / (job_id + ".upload")
     path = directory / (job_id + ".png")
@@ -139,6 +187,13 @@ def _process_job(directory, job):
         with Image.open(input_path) as source:
             source.seek(0)
             original = ImageOps.exif_transpose(source).convert("RGB")
+        tags = None
+        if job["tagging"]:
+            _update(directory, job_id, stage="tagging")
+            if _tagger is None:
+                from upscaler.tagging import SportsTagger
+                _tagger = SportsTagger()
+            tags = _tagger.tag(original)
         if job["upscale"]:
             _update(directory, job_id, stage="upscaling")
             model = job["model"]
@@ -152,7 +207,8 @@ def _process_job(directory, job):
         _update(directory, job_id, stage="saving")
         result.save(path, "PNG")
         _update(directory, job_id, status="completed", stage="completed", width=result.width,
-                height=result.height, finished_at=_now())
+                height=result.height, finished_at=_now(),
+                tags=json.dumps(tags, ensure_ascii=False) if tags is not None else None)
         terminal = True
     except Exception as exc:
         path.unlink(missing_ok=True)
@@ -163,15 +219,17 @@ def _process_job(directory, job):
         if terminal:
             input_path.unlink(missing_ok=True)
 
-@app.post("/api/pipeline", status_code=202)
+@app.post("/api/pipeline", status_code=202, response_model=QueuedJob)
 def pipeline(request: Request,
              image: UploadFile = File(..., description="Image to process (maximum 20 MiB)."),
              model: str = Form("realesrgan-x4plus", description="Upscale model, used when upscale is true."),
              upscale: bool = Form(True, description="Set false to retain the original image dimensions."),
+             tagging: bool = Form(True, description="Generate Persian sports and recreation tags from the original image."),
              adjustments: str = Form("{}", description='JSON object, e.g. {"exposure":10,"contrast":8}.')):
     """Queue an image for optional upscaling and color/light adjustments.
 
-    Poll the returned status_url for completion and a download URL.
+    Poll the returned status_url for completion, a download URL, and sports tags.
+    Set tagging=false to skip tagging. Scores are CLIP cosine similarities, not probabilities.
 
     The adjustments form field is a JSON object. Exposure, contrast,
     highlights, shadows, clarity, temperature, tint, saturation and vibrance
@@ -203,9 +261,9 @@ def pipeline(request: Request,
     try:
         input_path.write_bytes(data)
         with _connect(directory) as db:
-            db.execute("""INSERT INTO jobs (id, status, stage, created_at, upscale, model, params)
-                          VALUES (?, 'queued', 'waiting', ?, ?, ?, ?)""",
-                       (str(job_id), _now(), int(upscale), model if upscale else None, json.dumps(params)))
+            db.execute("""INSERT INTO jobs (id, status, stage, created_at, upscale, model, params, tagging)
+                          VALUES (?, 'queued', 'waiting', ?, ?, ?, ?, ?)""",
+                       (str(job_id), _now(), int(upscale), model if upscale else None, json.dumps(params), int(tagging)))
     except Exception:
         input_path.unlink(missing_ok=True)
         raise
@@ -219,6 +277,9 @@ def _job_response(request, row, db):
     job.pop("params")
     seq = job.pop("seq")
     job["upscale"] = bool(job["upscale"])
+    job["tagging"] = bool(job["tagging"])
+    if job["tags"] is not None:
+        job["tags"] = json.loads(job["tags"])
     if job["status"] == "queued":
         job["queue_position"] = db.execute(
             "SELECT COUNT(*) FROM jobs WHERE status='queued' AND seq<=?", (seq,)).fetchone()[0]
@@ -227,7 +288,7 @@ def _job_response(request, row, db):
     return {key: value for key, value in job.items() if value is not None or key == "model"}
 
 
-@app.get("/api/jobs")
+@app.get("/api/jobs", response_model=JobList, response_model_exclude_unset=True)
 def list_jobs(request: Request, limit: int = 50, offset: int = 0):
     """List jobs with their current state and queue position, newest first."""
     if not 1 <= limit <= 200 or offset < 0:
@@ -242,7 +303,7 @@ def list_jobs(request: Request, limit: int = 50, offset: int = 0):
                 "jobs": [_job_response(request, row, db) for row in rows]}
 
 
-@app.get("/api/jobs/{job_id}", name="pipeline_status")
+@app.get("/api/jobs/{job_id}", name="pipeline_status", response_model=JobResponse, response_model_exclude_unset=True)
 def pipeline_status(request: Request, job_id: UUID):
     """Return job status and, when complete, the result download URL."""
     _ensure_worker(_OUTPUT_DIR)

@@ -26,8 +26,10 @@ dependencies = [
 dev = ["pytest>=7.0", "gradio>=6.0", "onnxruntime>=1.16", "onnx>=1.15", "onnxscript>=0.1", "pypdfium2>=4", "pillow-heif>=0.13", "imageio-ffmpeg>=0.4"]
 # app.py uses Gradio 6 APIs (ImageSlider, buttons=, launch(theme=…)) — older
 # majors fail at startup, so the floor must match.
-gui = ["gradio>=6.0", "pypdfium2>=4", "pillow-heif>=0.13", "onnxruntime>=1.16", "fastapi>=0.110", "pydantic>=2", "python-multipart>=0.0.9"]
-api = ["fastapi>=0.110", "pydantic>=2", "uvicorn>=0.27", "python-multipart>=0.0.9"]
+# CLIP's upstream checkpoint is a PyTorch .bin; current Transformers requires
+# torch 2.6+ to load this format safely.
+gui = ["gradio>=6.0", "pypdfium2>=4", "pillow-heif>=0.13", "onnxruntime>=1.16", "fastapi>=0.110", "pydantic>=2", "python-multipart>=0.0.9", "transformers>=4.40,<5", "torch>=2.6"]
+api = ["fastapi>=0.110", "pydantic>=2", "uvicorn>=0.27", "python-multipart>=0.0.9", "transformers>=4.40,<5", "torch>=2.6"]
 pdf = ["pypdfium2>=4"]
 # onnxscript is only needed to *export* (torch's modern exporter); pure
 # inference needs just onnxruntime.

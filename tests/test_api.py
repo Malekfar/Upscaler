@@ -2,10 +2,19 @@
 import io
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
 from upscaler import api
+
+
+@pytest.fixture(autouse=True)
+def fake_tagger(monkeypatch):
+    class FakeTagger:
+        def tag(self, image):
+            return [{"label": "استخر", "score": 0.31}]
+    monkeypatch.setattr(api, "_tagger", FakeTagger())
 
 
 class FakeUpscaler:
@@ -36,8 +45,11 @@ def test_pipeline_and_download(tmp_path, monkeypatch):
     assert payload["status"] == "completed"
     assert (payload["width"], payload["height"]) == (4, 6)
     assert payload["download_url"].startswith("https://")
+    assert payload["tagging"] is True
+    assert payload["tags"] == [{"label": "استخر", "score": 0.31}]
     listed = client.get("/api/jobs").json()["jobs"][0]
     assert listed["download_url"] == payload["download_url"]
+    assert listed["tags"] == payload["tags"]
     downloaded = client.get(payload["download_url"])
     assert downloaded.status_code == 200
     assert downloaded.headers["content-type"] == "image/png"
@@ -93,7 +105,7 @@ def test_skip_upscale_and_swagger(tmp_path, monkeypatch):
     Image.new("RGB", (2, 3), (80, 80, 80)).save(source, "PNG")
     response = client.post(
         "/api/pipeline", files={"image": ("input.png", source.getvalue(), "image/png")},
-        data={"upscale": "false", "adjustments": '{"exposure":50}'},
+        data={"upscale": "false", "tagging": "false", "adjustments": '{"exposure":50}'},
     )
     assert response.status_code == 202
     for _ in range(100):
@@ -103,6 +115,8 @@ def test_skip_upscale_and_swagger(tmp_path, monkeypatch):
         time.sleep(0.01)
     assert job["status"] == "completed"
     assert job["upscale"] is False
+    assert job["tagging"] is False
+    assert "tags" not in job
     assert job["model"] is None
     assert (job["width"], job["height"]) == (2, 3)
     image = Image.open(io.BytesIO(client.get(job["download_url"]).content))
@@ -116,6 +130,8 @@ def test_skip_upscale_and_swagger(tmp_path, monkeypatch):
     body_ref = schema["paths"]["/api/pipeline"]["post"]["requestBody"]["content"]["multipart/form-data"]["schema"]["$ref"]
     body = schema["components"]["schemas"][body_ref.rsplit("/", 1)[-1]]
     assert body["properties"]["upscale"]["default"] is True
+    assert body["properties"]["tagging"]["default"] is True
+    assert "tags" in schema["components"]["schemas"]["JobResponse"]["properties"]
 
 
 def test_fifo_queue_and_error_details(tmp_path, monkeypatch):
@@ -192,4 +208,44 @@ def test_interrupted_job_is_recovered(tmp_path, monkeypatch):
             break
         time.sleep(0.02)
     assert job["status"] == "completed"
+    assert job["tagging"] is False
     assert client.get(job["download_url"]).status_code == 200
+
+
+def test_tagging_failure_is_reported(tmp_path, monkeypatch):
+    class BrokenTagger:
+        def tag(self, image):
+            raise RuntimeError("tagging failed")
+
+    monkeypatch.setattr(api, "_OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(api, "_tagger", BrokenTagger())
+    client = TestClient(api.app)
+    source = io.BytesIO()
+    Image.new("RGB", (3, 3)).save(source, "PNG")
+    response = client.post("/api/pipeline", files={"image": ("input.png", source.getvalue(), "image/png")},
+                           data={"upscale": "false"})
+    for _ in range(200):
+        job = client.get(response.json()["status_url"]).json()
+        if job["status"] in ("completed", "failed"):
+            break
+        time.sleep(0.01)
+    assert job["status"] == "failed"
+    assert job["stage"] == "tagging"
+    assert "tagging failed" in job["error"]
+    assert "download_url" not in job
+
+
+def test_legacy_database_migration(tmp_path):
+    import sqlite3
+    db = sqlite3.connect(tmp_path / "jobs.sqlite3")
+    db.execute("""CREATE TABLE jobs (seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL,
+        status TEXT NOT NULL, stage TEXT NOT NULL, created_at TEXT NOT NULL, started_at TEXT,
+        finished_at TEXT, upscale INTEGER NOT NULL, model TEXT, params TEXT NOT NULL,
+        width INTEGER, height INTEGER, error TEXT)""")
+    db.execute("INSERT INTO jobs (id, status, stage, created_at, upscale, params) VALUES ('old', 'completed', 'completed', '2020', 0, '{}')")
+    db.commit()
+    db.close()
+    with api._connect(tmp_path) as migrated:
+        row = migrated.execute("SELECT tagging, tags FROM jobs WHERE id='old'").fetchone()
+        assert row['tagging'] == 0
+        assert row['tags'] is None

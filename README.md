@@ -585,8 +585,8 @@ the official NAFNet Google Drive.
 
 ## Image pipeline API
 
-The API accepts an image, optionally upscales it, applies color-and-light adjustments, and
-saves the result as a PNG. Start the Docker services with `docker compose up --build`;
+The API accepts an image, generates sports and recreation tags, optionally upscales it,
+applies color-and-light adjustments, and saves the result as a PNG. Start the Docker services with `docker compose up --build`;
 the API and web UI are both available on port 9090. The
 Compose configuration requires an NVIDIA GPU. API output is stored persistently
 in the `api-output` Docker volume. Interactive Swagger documentation is available
@@ -605,6 +605,7 @@ curl -X POST http://localhost:9090/api/pipeline \
   -F 'image=@photo.jpg' \
   -F 'model=realesrgan-x4plus' \
   -F 'upscale=false' \
+  -F 'tagging=true' \
   -F 'adjustments={"exposure":10,"contrast":8,"vibrance":18}'
 ```
 
@@ -617,6 +618,18 @@ curl http://localhost:9090/api/jobs/JOB_UUID
 
 Statuses are `queued`, `processing`, `completed`, and `failed`. A completed
 job includes output dimensions and an HTTPS `download_url`; GET that URL for the PNG.
+By default it also includes `tagging: true` and `tags`, for example
+`[{"label":"استخر","score":0.31}]`. The list may be empty if no labels meet
+the threshold. Scores are CLIP cosine similarities, not probabilities. Tagging
+uses the original, orientation-corrected image and runs locally with
+`openai/clip-vit-base-patch32`, downloaded on first use and cached in the weights
+volume. It compares against the fixed sports and recreation vocabulary in
+`upscaler/tagging.py`, returning labels with cosine similarity at least 0.26;
+the threshold is a heuristic, not a calibrated confidence. Its resized,
+center-cropped view can miss small or edge-of-frame objects. Predictions can be
+inaccurate. Set `tagging=false` to skip it. Existing queued jobs from
+before this feature remain untagged. A tagging error fails the job and is
+reported with stage `tagging` rather than silently returning missing tags.
 Serve the application through an HTTPS reverse proxy with a valid certificate;
 the application itself does not terminate TLS. Direct access to the HTTP-only
 container port cannot serve the HTTPS download URL.
