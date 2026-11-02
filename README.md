@@ -627,7 +627,10 @@ volume. It compares against the fixed sports and recreation vocabulary in
 `upscaler/tagging.py`, returning labels with cosine similarity at least 0.26;
 the threshold is a heuristic, not a calibrated confidence. Its resized,
 center-cropped view can miss small or edge-of-frame objects. Predictions can be
-inaccurate. Set `tagging=false` to skip it. Existing queued jobs from
+inaccurate. Labels such as swimming packages describe services that a photo
+alone cannot reliably confirm; treat those tags as visual suggestions. Set
+`tagging=false` to skip it. Changing the vocabulary affects new jobs, not tags
+already stored for completed jobs. Existing queued jobs from
 before this feature remain untagged. A tagging error fails the job and is
 reported with stage `tagging` rather than silently returning missing tags.
 Serve the application through an HTTPS reverse proxy with a valid certificate;
